@@ -5,20 +5,21 @@ import cv2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import numpy as np
-from std_msgs.msg import Float64MultiArray  
+
+from geometry_msgs.msg import Point
 
 window = 50
 x_history = [0] * window
 y_history = [0] * window
 count = 0
 
-def moving_average(point):
+def moving_average(coord):
     global count 
     count += 1
     if count > window:
     
-        x = point[0]
-        y = point[1]
+        x = coord.x
+        y = coord.y
 
         x_history.pop()
         x_history.insert(0, x)
@@ -26,23 +27,26 @@ def moving_average(point):
         y_history.pop()
         y_history.insert(0, y)
 
-        return [np.mean(x_history), np.mean(y_history)]
+        return Point(int(np.mean(x_history)), int(np.mean(y_history)), None)
     else:
-        print(count)
-        return [-1, -1]
+        return Point(-1, -1, -1)
 
 
 
 def find_nearest_contour(contours, image):
     
+    # Copy the image to prevent modification
     image = image.copy()
     
+    # Declare initial params to find the nearest contour
     max_y = 0
     nearest_contour_id = -1
-    contour_center_coord = [-1, -1]
+    contour_center_coord = Point(-1, -1, -1)
 
+    # Min area of the blob, obtained empirically
     min_area = 400
 
+    # if we find contours
     if len(contours) > 0:
         for i in range(0, len(contours)):            
             c = contours[i]
@@ -54,39 +58,46 @@ def find_nearest_contour(contours, image):
                     cX = int(M["m10"] / M["m00"])
                     cY = int(M["m01"] / M["m00"])
                 else:
-                    # set values as what you need in the situation
                     cX, cY = 0, 0
 
                 if cY > max_y:
                     max_y = cY
                     nearest_contour_id = i
-                    contour_center_coord = [cX, cY]
+                    contour_center_coord = Point(cX, cY, None)
+    else:
+        return image, None, None
 
     
     if nearest_contour_id != -1:
-        print("Area: " + str(cv2.contourArea(contours[nearest_contour_id])) + " Centroid: " +  str(contour_center_coord))
+        print("Area: " + str(cv2.contourArea(contours[nearest_contour_id])) + "\nCentroid: " +  str(contour_center_coord) + "\n")
         cv2.drawContours(image, contours, nearest_contour_id, (0, 255, 0), 3)
     
     contour_center_coord = moving_average(contour_center_coord)
-    print(contour_center_coord)
     return image, nearest_contour_id, contour_center_coord
 
-def offset_from_control_point(coord, control_point):
-    return [float(control_point[0] - coord[0]),float(control_point[1] - coord[1])]
+def find_offset_from_control_point(coord, control_point):
+    # Camera need to Move right: +ve x || Camera need to Move up: +ve y
+    offset = Point(control_point.x-coord.x, -1*(control_point.y-coord.y), None)
+    print ("Offset: " + str(offset) + "\n")
+    return offset
 
 def showImage(img):
     cv2.imshow('image', img)
     cv2.waitKey(1)
 
 def process_image(msg):
-    
+    print("===")
+    #Resize params
+    resize_x = 0.5
+    resize_y = 0.5
+
     # Declare the cvBridge object
     bridge = CvBridge()
     orig = bridge.imgmsg_to_cv2(msg, "bgr8")
     drawImg = orig
     
     # Resize the image 
-    resized = cv2.resize(orig, None, fx=0.5, fy=0.5)
+    resized = cv2.resize(orig, None, fx=resize_x, fy=resize_y)
     drawImg = resized
     
     # Convert to grayscale
@@ -109,30 +120,24 @@ def process_image(msg):
     # Find the nearest contour
     image, nearest_contour_id, contour_center_coord = find_nearest_contour(contours, resized)
     
-    # Set a control point
-    control_point = [image.shape[1]/2, image.shape[0]/2]
-    amt_to_move = offset_from_control_point(contour_center_coord, control_point)
+    if (~(nearest_contour_id is None)):
+        # Set a control point
+        control_point = Point(image.shape[1]*resize_x, image.shape[0]*resize_y, None)
+        offset_from_control_point = find_offset_from_control_point(control_point, contour_center_coord)
 
-    # Visualise the control point and centroid
-    image = cv2.circle(image, (int(contour_center_coord[0]), int(contour_center_coord[1])), 3, color=(0, 0, 255), thickness=3)
-    image = cv2.circle(image, (int(control_point[0]), int(control_point[1])), 3, color=(0, 255, 0), thickness=3)
+        # Visualise the control point and centroid
+        image = cv2.circle(image, (int(contour_center_coord.x), int(contour_center_coord.y)), 3, color=(0, 0, 255), thickness=3)
+        image = cv2.circle(image, (int(control_point.x), int(control_point.y)), 3, color=(0, 255, 0), thickness=3)
 
-    showImage(image)
+        showImage(image)
 
-    pub_image = rospy.Publisher('segmented_colour/image', Image, queue_size=10)
-    pub_centroid = rospy.Publisher('segmented_colour/centroid', Float64MultiArray, queue_size=10)
+        pub_image = rospy.Publisher('armCamera/nearest_colourBlob', Image, queue_size=10)
+        pub_centroid = rospy.Publisher('armCamera/nearest_colourBlobCenter', Point, queue_size=10)
 
-    image_message = bridge.cv2_to_imgmsg(image, encoding="passthrough")
-    pub_image.publish(image_message)
-
-    my_msg = Float64MultiArray()  
-    my_msg.data = amt_to_move
-    pub_centroid.publish(my_msg)
-
-    try:
-       pass
-    except Exception as err:
-        print err
+        image_message = bridge.cv2_to_imgmsg(image, encoding="passthrough")
+        
+        pub_image.publish(image_message)
+        pub_centroid.publish(offset_from_control_point)
 
 def start_node():
     rospy.init_node('segmented_colour')
