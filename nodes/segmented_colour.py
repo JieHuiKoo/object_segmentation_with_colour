@@ -86,28 +86,37 @@ def showImage(img):
     cv2.imshow('image', img)
     cv2.waitKey(1)
 
-def find_bounding_box_coords_from_contours(contours):
+def find_bounding_box_coords_from_contours(contours, maxPoint):
 
     boundingBoxPoints = []
 
     for contour in contours:
-        bottomright = Point(0, 0, None)
-        upperleft = Point(sys.maxint, sys.maxint, sys.maxint)
+        bottomRight = Point(0, 0, None)
+        topLeft = Point(sys.maxint, sys.maxint, sys.maxint)
         
         # Find the max bounding box coords for each contour
         for point in contour:
             point = point[0]
-            if upperleft.x > point[0]:
-                upperleft.x = point[0]
-            if upperleft.y > point[1]:
-                upperleft.y = point[1]
+            if topLeft.x > point[0]:
+                topLeft.x = point[0] - 20
+            if topLeft.y > point[1]:
+                topLeft.y = point[1] - 20
 
-            if bottomright.x < point[0]:
-                bottomright.x = point[0]
-            if bottomright.y < point[1]:
-                bottomright.y = point[1]
+            if bottomRight.x < point[0]:
+                bottomRight.x = point[0] + 20
+            if bottomRight.y < point[1]:
+                bottomRight.y = point[1] + 20
 
-        boundingBoxPoints.append([upperleft, bottomright])
+        if (topLeft.x < 0):
+            topLeft.x = 0
+        if (topLeft.y < 0):
+            topLeft.y = 0
+        if (bottomRight.x > maxPoint.x):
+            bottomRight.x = maxPoint.x
+        if (bottomRight.y > maxPoint.y):
+            bottomRight.y = maxPoint.y
+
+        boundingBoxPoints.append([topLeft, bottomRight])
     
     return boundingBoxPoints
 
@@ -132,9 +141,19 @@ def draw_bounding_boxes(input_image, boundingBoxPoints):
     return image
 
 def store_boundingBoxPoints_in_marker(boundingBoxPoints):
+    
+    boundingBoxPointsArray = []
+
+    for boundingBoxLocation in boundingBoxPoints:
+        boundingBoxPointsArray.append(boundingBoxLocation[0])
+        boundingBoxPointsArray.append(boundingBoxLocation[1])
+    
     marker = Marker()
+    marker.type = marker.POINTS
+    marker.action = marker.ADD
+    marker.points = boundingBoxPointsArray
 
-
+    return marker
 
 def process_image(msg):
     #Resize params
@@ -168,14 +187,13 @@ def process_image(msg):
     contours = find_contours(opening)
 
     # Find the bounding box coordinates of each contour
-    boundingBoxPoints = find_bounding_box_coords_from_contours(contours)
+    boundingBoxPoints = find_bounding_box_coords_from_contours(contours, Point(resized.shape[1], resized.shape[0], None))
     
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
     # Store the boundingBoxPoints in marker
-    marker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
-
+    boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
 
     showImage(resized)
 
@@ -184,8 +202,8 @@ def process_image(msg):
     image_pub = rospy.Publisher('armCamera/nearestColourBlob', Image, queue_size=10)
     image_pub.publish(image_message)
 
-    marker_pub = rospy.Publisher("/armcamera/ColourBlobBoundingBoxPoints", Marker, queue_size = 2)
-
+    marker_pub = rospy.Publisher("armCamera/colourBlobBoundingBoxPoints", Marker, queue_size = 2)
+    marker_pub.publish(boundingBoxMarker)
 
     # image, nearest_contour_id, contour_center_coord = find_nearest_contour(contours, resized)
     
