@@ -7,6 +7,7 @@ from cv_bridge import CvBridge
 import numpy as np
 
 from geometry_msgs.msg import Point
+from visualization_msgs.msg import Marker
 
 window = 50
 x_history = [0] * window
@@ -85,11 +86,60 @@ def showImage(img):
     cv2.imshow('image', img)
     cv2.waitKey(1)
 
+def find_bounding_box_coords_from_contours(contours):
+
+    boundingBoxPoints = []
+
+    for contour in contours:
+        bottomright = Point(0, 0, None)
+        upperleft = Point(sys.maxint, sys.maxint, sys.maxint)
+        
+        # Find the max bounding box coords for each contour
+        for point in contour:
+            point = point[0]
+            if upperleft.x > point[0]:
+                upperleft.x = point[0]
+            if upperleft.y > point[1]:
+                upperleft.y = point[1]
+
+            if bottomright.x < point[0]:
+                bottomright.x = point[0]
+            if bottomright.y < point[1]:
+                bottomright.y = point[1]
+
+        boundingBoxPoints.append([upperleft, bottomright])
+    
+    return boundingBoxPoints
+
+def find_contours(image):
+    min_area = 400
+    accepted_contours = []
+    
+    _, contours, hierarchy = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for contour in contours:
+        if cv2.contourArea(contour) > min_area:
+            accepted_contours.append(contour)
+
+    return accepted_contours
+
+def draw_bounding_boxes(input_image, boundingBoxPoints):
+    
+    image = input_image.copy()
+    for boundingBoxLocation in boundingBoxPoints:
+        image = cv2.rectangle(image, (boundingBoxLocation[0].x, boundingBoxLocation[0].y), (boundingBoxLocation[1].x, boundingBoxLocation[1].y), (255, 0, 0), 3)
+
+    return image
+
+def store_boundingBoxPoints_in_marker(boundingBoxPoints):
+    marker = Marker()
+
+
+
 def process_image(msg):
-    print("===")
     #Resize params
-    resize_x = 0.5
-    resize_y = 0.5
+    resize_x = 1
+    resize_y = 1
 
     # Declare the cvBridge object
     bridge = CvBridge()
@@ -115,29 +165,48 @@ def process_image(msg):
     drawImg = cv2.cvtColor(opening, cv2.COLOR_GRAY2BGR)
 
     # Find Contours
-    _, contours, hierarchy = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = find_contours(opening)
 
-    # Find the nearest contour
-    image, nearest_contour_id, contour_center_coord = find_nearest_contour(contours, resized)
+    # Find the bounding box coordinates of each contour
+    boundingBoxPoints = find_bounding_box_coords_from_contours(contours)
     
-    if (~(nearest_contour_id is None)):
-        # Set a control point
-        control_point = Point(image.shape[1]*resize_x, image.shape[0]*resize_y, None)
-        offset_from_control_point = find_offset_from_control_point(control_point, contour_center_coord)
+    # Draw the bounding boxes
+    resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
-        # Visualise the control point and centroid
-        image = cv2.circle(image, (int(contour_center_coord.x), int(contour_center_coord.y)), 3, color=(0, 0, 255), thickness=3)
-        image = cv2.circle(image, (int(control_point.x), int(control_point.y)), 3, color=(0, 255, 0), thickness=3)
+    # Store the boundingBoxPoints in marker
+    marker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
 
-        showImage(image)
 
-        pub_image = rospy.Publisher('armCamera/nearest_colourBlob', Image, queue_size=10)
-        pub_centroid = rospy.Publisher('armCamera/nearest_colourBlobCenter', Point, queue_size=10)
+    showImage(resized)
 
-        image_message = bridge.cv2_to_imgmsg(image, encoding="passthrough")
+    image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
+    
+    image_pub = rospy.Publisher('armCamera/nearestColourBlob', Image, queue_size=10)
+    image_pub.publish(image_message)
+
+    marker_pub = rospy.Publisher("/armcamera/ColourBlobBoundingBoxPoints", Marker, queue_size = 2)
+
+
+    # image, nearest_contour_id, contour_center_coord = find_nearest_contour(contours, resized)
+    
+    # if (~(nearest_contour_id is None)):
+    #     # Set a control point
+    #     control_point = Point(image.shape[1]*resize_x, image.shape[0]*resize_y, None)
+    #     offset_from_control_point = find_offset_from_control_point(control_point, contour_center_coord)
+
+    #     # Visualise the control point and centroid
+    #     image = cv2.circle(image, (int(contour_center_coord.x), int(contour_center_coord.y)), 3, color=(0, 0, 255), thickness=3)
+    #     image = cv2.circle(image, (int(control_point.x), int(control_point.y)), 3, color=(0, 255, 0), thickness=3)
+
+    #     showImage(image)
+
+    #     pub_image = rospy.Publisher('armCamera/nearestColourBlob', Image, queue_size=10)
+    #     pub_centroid = rospy.Publisher('armCamera/nearestColourBlobCenter', Point, queue_size=10)
+
+    #     image_message = bridge.cv2_to_imgmsg(image, encoding="passthrough")
         
-        pub_image.publish(image_message)
-        pub_centroid.publish(offset_from_control_point)
+    #     pub_image.publish(image_message)
+    #     pub_centroid.publish(offset_from_control_point)
 
 def start_node():
     rospy.init_node('segmented_colour')
