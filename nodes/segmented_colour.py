@@ -199,10 +199,10 @@ def process_image(msg):
 
     image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
     
-    image_pub = rospy.Publisher('armCamera/nearestColourBlob', Image, queue_size=10)
+    image_pub = rospy.Publisher('armCamera/colourBlobsAnnotated', Image, queue_size=10)
     image_pub.publish(image_message)
 
-    marker_pub = rospy.Publisher("armCamera/colourBlobBoundingBoxPoints", Marker, queue_size = 2)
+    marker_pub = rospy.Publisher("armCamera/colourBlobsBoundingBoxPoints", Marker, queue_size = 2)
     marker_pub.publish(boundingBoxMarker)
 
 def start_node():
