@@ -205,27 +205,6 @@ def process_image(msg):
     marker_pub = rospy.Publisher("armCamera/colourBlobBoundingBoxPoints", Marker, queue_size = 2)
     marker_pub.publish(boundingBoxMarker)
 
-    # image, nearest_contour_id, contour_center_coord = find_nearest_contour(contours, resized)
-    
-    # if (~(nearest_contour_id is None)):
-    #     # Set a control point
-    #     control_point = Point(image.shape[1]*resize_x, image.shape[0]*resize_y, None)
-    #     offset_from_control_point = find_offset_from_control_point(control_point, contour_center_coord)
-
-    #     # Visualise the control point and centroid
-    #     image = cv2.circle(image, (int(contour_center_coord.x), int(contour_center_coord.y)), 3, color=(0, 0, 255), thickness=3)
-    #     image = cv2.circle(image, (int(control_point.x), int(control_point.y)), 3, color=(0, 255, 0), thickness=3)
-
-    #     showImage(image)
-
-    #     pub_image = rospy.Publisher('armCamera/nearestColourBlob', Image, queue_size=10)
-    #     pub_centroid = rospy.Publisher('armCamera/nearestColourBlobCenter', Point, queue_size=10)
-
-    #     image_message = bridge.cv2_to_imgmsg(image, encoding="passthrough")
-        
-    #     pub_image.publish(image_message)
-    #     pub_centroid.publish(offset_from_control_point)
-
 def start_node():
     rospy.init_node('segmented_colour')
     rospy.loginfo('segmented_colour node started')
