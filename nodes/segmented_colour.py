@@ -9,78 +9,17 @@ import numpy as np
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 
-window = 50
-x_history = [0] * window
-y_history = [0] * window
-count = 0
-
-def moving_average(coord):
-    global count 
-    count += 1
-    if count > window:
+def obtain_connected_region_stats(i, stats, centroids):
     
-        x = coord.x
-        y = coord.y
+    connected_region_stats = {}
+    connected_region_stats['x'] = stats[i, cv2.CC_STAT_LEFT]
+    connected_region_stats['y'] = stats[i, cv2.CC_STAT_TOP]
+    connected_region_stats['w'] = stats[i, cv2.CC_STAT_WIDTH]
+    connected_region_stats['h'] = stats[i, cv2.CC_STAT_HEIGHT]
+    connected_region_stats['area'] = stats[i, cv2.CC_STAT_AREA]
+    connected_region_stats['center'] = centroids[i]
 
-        x_history.pop()
-        x_history.insert(0, x)
-
-        y_history.pop()
-        y_history.insert(0, y)
-
-        return Point(int(np.mean(x_history)), int(np.mean(y_history)), None)
-    else:
-        return Point(-1, -1, -1)
-
-
-
-def find_nearest_contour(contours, image):
-    
-    # Copy the image to prevent modification
-    image = image.copy()
-    
-    # Declare initial params to find the nearest contour
-    max_y = 0
-    nearest_contour_id = -1
-    contour_center_coord = Point(-1, -1, -1)
-
-    # Min area of the blob, obtained empirically
-    min_area = 400
-
-    # if we find contours
-    if len(contours) > 0:
-        for i in range(0, len(contours)):            
-            c = contours[i]
-
-            if cv2.contourArea(c) > min_area:
-                M = cv2.moments(c)
-
-                if M["m00"] != 0:
-                    cX = int(M["m10"] / M["m00"])
-                    cY = int(M["m01"] / M["m00"])
-                else:
-                    cX, cY = 0, 0
-
-                if cY > max_y:
-                    max_y = cY
-                    nearest_contour_id = i
-                    contour_center_coord = Point(cX, cY, None)
-    else:
-        return image, None, None
-
-    
-    if nearest_contour_id != -1:
-        print("Area: " + str(cv2.contourArea(contours[nearest_contour_id])) + "\nCentroid: " +  str(contour_center_coord) + "\n")
-        cv2.drawContours(image, contours, nearest_contour_id, (0, 255, 0), 3)
-    
-    contour_center_coord = moving_average(contour_center_coord)
-    return image, nearest_contour_id, contour_center_coord
-
-def find_offset_from_control_point(coord, control_point):
-    # Camera need to Move right: +ve x || Camera need to Move up: +ve y
-    offset = Point(control_point.x-coord.x, -1*(control_point.y-coord.y), None)
-    print ("Offset: " + str(offset) + "\n")
-    return offset
+    return connected_region_stats
 
 def showImage(img):
     cv2.imshow('image', img)
@@ -173,25 +112,26 @@ def process_image(msg):
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
     drawImg = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
+    # Apply Gaussian Filter
+    gaussian = cv2.GaussianBlur(gray, (3,3), 0)
+
     # Threshold the image
-    threshVal = 75
-    ret,thresh = cv2.threshold(gray, threshVal, 255, cv2.THRESH_BINARY_INV)
-    drawImg = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    adaptive_img = cv2.adaptiveThreshold(gaussian, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 3)
+    drawImg = cv2.cvtColor(adaptive_img, cv2.COLOR_GRAY2BGR)
 
     showImage(drawImg)
 
 
     # Morphology open
     kernel = np.ones((5,5),np.uint8)
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_CLOSE, kernel)
     drawImg = cv2.cvtColor(opening, cv2.COLOR_GRAY2BGR)
 
-
     # Find Contours
-    contours = find_contours(opening)
+    numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(opening, 8, cv2.CV_32S)
 
     # Find the bounding box coordinates of each contour
-    boundingBoxPoints = find_bounding_box_coords_from_contours(contours, Point(resized.shape[1], resized.shape[0], None))
+    boundingBoxPoints = find_bounding_box_coords_from_contours(centroids, stats, Point(resized.shape[1], resized.shape[0], None))
     
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
