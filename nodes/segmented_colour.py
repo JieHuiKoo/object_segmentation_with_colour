@@ -29,19 +29,22 @@ def find_bounding_box_coords_from_contours(centroids, stats, maxPoint):
 
     boundingBoxPoints = []
 
-    for i in range(0, len(centroids)):
+    # The first centroid is the background
+    for i in range(1, len(centroids)):
         
-        if stats[i, cv2.CC_STAT_AREA] < 100:
+        if stats[i, cv2.CC_STAT_AREA] < 500:
             continue
         
         bottomRight = Point(0, 0, None)
         topLeft = Point(sys.maxint, sys.maxint, sys.maxint)
         
-        topLeft.x = stats[i, cv2.CC_STAT_LEFT] - 20
-        topLeft.y = stats[i, cv2.CC_STAT_TOP] - 20
+        border_margin = 50
 
-        bottomRight.x = topLeft.x + stats[i, cv2.CC_STAT_WIDTH] + 20
-        bottomRight.y = topLeft.y + stats[i, cv2.CC_STAT_HEIGHT] + 20
+        topLeft.x = stats[i, cv2.CC_STAT_LEFT] - border_margin
+        topLeft.y = stats[i, cv2.CC_STAT_TOP] - border_margin
+
+        bottomRight.x = stats[i, cv2.CC_STAT_LEFT] + stats[i, cv2.CC_STAT_WIDTH] + border_margin
+        bottomRight.y = stats[i, cv2.CC_STAT_TOP]  + stats[i, cv2.CC_STAT_HEIGHT] + border_margin
 
         if (topLeft.x < 0):
             topLeft.x = 0
@@ -106,15 +109,12 @@ def process_image(msg):
 
     # Morphology open
     opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_OPEN, np.ones((3,3),np.uint8))
-    close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, np.ones((5,5),np.uint8))
+    close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, np.ones((11,11),np.uint8))
 
     drawImg = cv2.cvtColor(close, cv2.COLOR_GRAY2BGR)
 
-    showImage(drawImg)
-
-
     # Find Contours
-    numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(opening, 8, cv2.CV_32S)
+    numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(close, 8, cv2.CV_32S)
 
     # Find the bounding box coordinates of each contour
     boundingBoxPoints = find_bounding_box_coords_from_contours(centroids, stats, Point(resized.shape[1], resized.shape[0], None))
@@ -122,7 +122,7 @@ def process_image(msg):
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
-
+    # showImage(resized)
 
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
@@ -142,7 +142,7 @@ def process_image(msg):
 def start_node():
     rospy.init_node('segmented_colour')
     rospy.loginfo('segmented_colour node started')
-    start_node.rate = rospy.Rate(2)
+    start_node.rate = rospy.Rate(1)
     rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
     rospy.spin()
 
