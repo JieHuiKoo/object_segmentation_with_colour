@@ -25,26 +25,23 @@ def showImage(img):
     cv2.imshow('image', img)
     cv2.waitKey(1)
 
-def find_bounding_box_coords_from_contours(contours, maxPoint):
+def find_bounding_box_coords_from_contours(centroids, stats, maxPoint):
 
     boundingBoxPoints = []
 
-    for contour in contours:
+    for i in range(0, len(centroids)):
+        
+        if stats[i, cv2.CC_STAT_AREA] < 100:
+            continue
+        
         bottomRight = Point(0, 0, None)
         topLeft = Point(sys.maxint, sys.maxint, sys.maxint)
         
-        # Find the max bounding box coords for each contour
-        for point in contour:
-            point = point[0]
-            if topLeft.x > point[0]:
-                topLeft.x = point[0] - 20
-            if topLeft.y > point[1]:
-                topLeft.y = point[1] - 20
+        topLeft.x = stats[i, cv2.CC_STAT_LEFT] - 20
+        topLeft.y = stats[i, cv2.CC_STAT_TOP] - 20
 
-            if bottomRight.x < point[0]:
-                bottomRight.x = point[0] + 20
-            if bottomRight.y < point[1]:
-                bottomRight.y = point[1] + 20
+        bottomRight.x = topLeft.x + stats[i, cv2.CC_STAT_WIDTH] + 20
+        bottomRight.y = topLeft.y + stats[i, cv2.CC_STAT_HEIGHT] + 20
 
         if (topLeft.x < 0):
             topLeft.x = 0
@@ -58,18 +55,6 @@ def find_bounding_box_coords_from_contours(contours, maxPoint):
         boundingBoxPoints.append([topLeft, bottomRight])
     
     return boundingBoxPoints
-
-def find_contours(image):
-    min_area = 400
-    accepted_contours = []
-    
-    _, contours, hierarchy = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    for contour in contours:
-        if cv2.contourArea(contour) > min_area:
-            accepted_contours.append(contour)
-
-    return accepted_contours
 
 def draw_bounding_boxes(input_image, boundingBoxPoints):
     
@@ -119,13 +104,14 @@ def process_image(msg):
     adaptive_img = cv2.adaptiveThreshold(gaussian, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 3)
     drawImg = cv2.cvtColor(adaptive_img, cv2.COLOR_GRAY2BGR)
 
+    # Morphology open
+    opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_OPEN, np.ones((3,3),np.uint8))
+    close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, np.ones((5,5),np.uint8))
+
+    drawImg = cv2.cvtColor(close, cv2.COLOR_GRAY2BGR)
+
     showImage(drawImg)
 
-
-    # Morphology open
-    kernel = np.ones((5,5),np.uint8)
-    opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_CLOSE, kernel)
-    drawImg = cv2.cvtColor(opening, cv2.COLOR_GRAY2BGR)
 
     # Find Contours
     numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(opening, 8, cv2.CV_32S)
@@ -136,10 +122,10 @@ def process_image(msg):
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
+
+
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
-
-    
 
     image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
     
