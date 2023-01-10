@@ -178,10 +178,14 @@ def process_image(msg):
     ret,thresh = cv2.threshold(gray, threshVal, 255, cv2.THRESH_BINARY_INV)
     drawImg = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
+    showImage(drawImg)
+
+
     # Morphology open
     kernel = np.ones((5,5),np.uint8)
     opening = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
     drawImg = cv2.cvtColor(opening, cv2.COLOR_GRAY2BGR)
+
 
     # Find Contours
     contours = find_contours(opening)
@@ -195,26 +199,30 @@ def process_image(msg):
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
 
-    showImage(resized)
+    
 
     image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
     
-    image_pub = rospy.Publisher('armCamera/colourBlobsAnnotated', Image, queue_size=10)
+    image_pub = rospy.Publisher('armCamera/segmentedBlobs_AnnotatedImage', Image, queue_size=10)
     image_pub.publish(image_message)
 
-    marker_pub = rospy.Publisher("armCamera/colourBlobsBoundingBoxPoints", Marker, queue_size = 2)
+    rawimage_pub = rospy.Publisher('armCamera/segmentedBlobs_RawImage', Image, queue_size=10)
+    rawimage_pub.publish(msg)
+
+    marker_pub = rospy.Publisher("armCamera/segmentedBlobs_BoundingBoxPoints", Marker, queue_size = 10)
     marker_pub.publish(boundingBoxMarker)
+    start_node.rate.sleep()
 
 def start_node():
     rospy.init_node('segmented_colour')
     rospy.loginfo('segmented_colour node started')
-
+    start_node.rate = rospy.Rate(2)
     rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
-    
     rospy.spin()
 
 if __name__ == '__main__':
     try:
         start_node()
+
     except rospy.ROSInterruptException:
         pass
