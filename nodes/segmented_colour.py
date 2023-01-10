@@ -71,7 +71,7 @@ def store_boundingBoxPoints_in_marker(boundingBoxPoints):
     
     boundingBoxPointsArray = []
 
-    for boundingBoxLocation in boundingBoxPoints:
+    for boundingBoxLocation in boundingBoxPoints[1:]:
         boundingBoxPointsArray.append(boundingBoxLocation[0])
         boundingBoxPointsArray.append(boundingBoxLocation[1])
     
@@ -129,20 +129,20 @@ def process_image(msg):
 
     image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
     
-    image_pub = rospy.Publisher('armCamera/segmentedBlobs_AnnotatedImage', Image, queue_size=10)
+    image_pub = rospy.Publisher('armCamera/segmentedBlobs_AnnotatedImage', Image, queue_size=1)
     image_pub.publish(image_message)
 
-    rawimage_pub = rospy.Publisher('armCamera/segmentedBlobs_RawImage', Image, queue_size=10)
+    rawimage_pub = rospy.Publisher('armCamera/segmentedBlobs_RawImage', Image, queue_size=1)
     rawimage_pub.publish(msg)
 
-    marker_pub = rospy.Publisher("armCamera/segmentedBlobs_BoundingBoxPoints", Marker, queue_size = 10)
+    marker_pub = rospy.Publisher("armCamera/segmentedBlobs_BoundingBoxPoints", Marker, queue_size = 1)
     marker_pub.publish(boundingBoxMarker)
-    start_node.rate.sleep()
+    # start_node.rate.sleep()
 
 def start_node():
     rospy.init_node('segmented_colour')
     rospy.loginfo('segmented_colour node started')
-    start_node.rate = rospy.Rate(1)
+    # start_node.rate = rospy.Rate(1)
     rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
     rospy.spin()
 
