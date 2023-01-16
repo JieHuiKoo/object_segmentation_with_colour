@@ -82,6 +82,23 @@ def store_boundingBoxPoints_in_marker(boundingBoxPoints):
 
     return marker
 
+def draw_claw_mask(input_image):
+    claw_offset = 90
+    visible_width = 70
+    visible_height = 100
+
+    image = input_image.copy()
+    image = cv2.circle(image, (int(image.shape[1]/2)-claw_offset, int(image.shape[0]+25)), 120, 0, -1)
+    image = cv2.circle(image, (int(image.shape[1]/2)+claw_offset, int(image.shape[0]+25)), 120, 0, -1)
+    image = cv2.rectangle(image, ((int(image.shape[1]/2)-visible_width/2, int(image.shape[0])-visible_height)), ((int(image.shape[1]/2)+visible_width/2, int(image.shape[0]))), 255, -1)
+    return image
+
+def generate_claw_mask(dim):
+    blank_image = np.full(dim, 255, np.uint8)
+    claw_mask = draw_claw_mask(blank_image)
+
+    return claw_mask
+
 def process_image(msg):
     #Resize params
     resize_x = 1
@@ -95,11 +112,10 @@ def process_image(msg):
     # Resize the image 
     resized = cv2.resize(orig, None, fx=resize_x, fy=resize_y)
     drawImg = resized
-    
+
     # Convert to grayscale
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
     drawImg = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-
     # Apply Gaussian Filter
     gaussian = cv2.GaussianBlur(gray, (3,3), 0)
 
@@ -110,11 +126,14 @@ def process_image(msg):
     # Morphology open
     opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_OPEN, np.ones((3,3),np.uint8))
     close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, np.ones((11,11),np.uint8))
-
     drawImg = cv2.cvtColor(close, cv2.COLOR_GRAY2BGR)
 
+    # Draw Mask to remove claw
+    claw_mask = generate_claw_mask((resized.shape[0], resized.shape[1], 1))
+    claw_masked_image = cv2.bitwise_and(close, claw_mask)
+
     # Find Contours
-    numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(close, 8, cv2.CV_32S)
+    numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(claw_masked_image, 8, cv2.CV_32S)
 
     # Find the bounding box coordinates of each contour
     boundingBoxPoints = find_bounding_box_coords_from_contours(centroids, stats, Point(resized.shape[1], resized.shape[0], None))
@@ -122,7 +141,7 @@ def process_image(msg):
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
-    # showImage(resized)
+    showImage(resized)
 
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
