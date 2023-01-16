@@ -9,6 +9,9 @@ import numpy as np
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 
+print("Python Version: " + str(sys.version_info))
+print("OpenCV Version: " + str(cv2.__version__))
+
 def obtain_connected_region_stats(i, stats, centroids):
     
     connected_region_stats = {}
