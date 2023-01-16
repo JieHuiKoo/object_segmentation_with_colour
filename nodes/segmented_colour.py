@@ -141,7 +141,7 @@ def process_image(msg):
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
-    showImage(resized)
+    # showImage(resized)
 
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
