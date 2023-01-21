@@ -3,14 +3,35 @@ import rospy
 import sys
 import cv2
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
 import numpy as np
 
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 
-print("Python Version: " + str(sys.version_info))
+print("Python Version: " + str(sys.version_info[0]) + '.' + str(sys.version_info[1]))
 print("OpenCV Version: " + str(cv2.__version__))
+
+def imgmsg_to_cv2(img_msg):
+    if img_msg.encoding != "bgr8":
+        rospy.logerr("This Coral detect node has been hardcoded to the 'bgr8' encoding.  Come change the code if you're actually trying to implement a new camera")
+    dtype = np.dtype("uint8") # Hardcode to 8 bits...
+    dtype = dtype.newbyteorder('>' if img_msg.is_bigendian else '<')
+    image_opencv = np.ndarray(shape=(img_msg.height, img_msg.width, 3), # and three channels of data. Since OpenCV works with bgr natively, we don't need to reorder the channels.
+                    dtype=dtype, buffer=img_msg.data)
+    # If the byt order is different between the message and the system.
+    if img_msg.is_bigendian == (sys.byteorder == 'little'):
+        image_opencv = image_opencv.byteswap().newbyteorder()
+    return image_opencv
+
+def cv2_to_imgmsg(cv_image, encoding):
+    img_msg = Image()
+    img_msg.height = cv_image.shape[0]
+    img_msg.width = cv_image.shape[1]
+    img_msg.encoding = encoding
+    img_msg.is_bigendian = 0
+    img_msg.data = cv_image.tostring()
+    img_msg.step = len(img_msg.data) // img_msg.height # That double line is actually integer division, not a comment
+    return img_msg
 
 def obtain_connected_region_stats(i, stats, centroids):
     
@@ -108,8 +129,7 @@ def process_image(msg):
     resize_y = 1
 
     # Declare the cvBridge object
-    bridge = CvBridge()
-    orig = bridge.imgmsg_to_cv2(msg, "bgr8")
+    orig = imgmsg_to_cv2(msg)
     drawImg = orig
     
     # Resize the image 
@@ -149,7 +169,7 @@ def process_image(msg):
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
 
-    image_message = bridge.cv2_to_imgmsg(resized, encoding="passthrough")
+    image_message = cv2_to_imgmsg(resized, encoding="passthrough")
     
     image_pub = rospy.Publisher('armCamera/segmentedBlobs_AnnotatedImage', Image, queue_size=1)
     image_pub.publish(image_message)
@@ -159,12 +179,10 @@ def process_image(msg):
 
     marker_pub = rospy.Publisher("armCamera/segmentedBlobs_BoundingBoxPoints", Marker, queue_size = 1)
     marker_pub.publish(boundingBoxMarker)
-    # start_node.rate.sleep()
 
 def start_node():
     rospy.init_node('segmented_colour')
     rospy.loginfo('segmented_colour node started')
-    # start_node.rate = rospy.Rate(1)
     rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
     rospy.spin()
 
