@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#! /home/jiehui/anaconda3/envs/tensorflow/bin/python
 import rospy
 import sys
 import cv2
@@ -12,8 +12,10 @@ print("Python Version: " + str(sys.version_info[0]) + '.' + str(sys.version_info
 print("OpenCV Version: " + str(cv2.__version__))
 
 def imgmsg_to_cv2(img_msg):
+    rgb8_flag = 0
     if img_msg.encoding != "bgr8":
-        rospy.logerr("This Coral detect node has been hardcoded to the 'bgr8' encoding.  Come change the code if you're actually trying to implement a new camera")
+        rgb8_flag = 1
+        # rospy.logerr("This Coral detect node has been hardcoded to the 'bgr8' encoding.  Come change the code if you're actually trying to implement a new camera")
     dtype = np.dtype("uint8") # Hardcode to 8 bits...
     dtype = dtype.newbyteorder('>' if img_msg.is_bigendian else '<')
     image_opencv = np.ndarray(shape=(img_msg.height, img_msg.width, 3), # and three channels of data. Since OpenCV works with bgr natively, we don't need to reorder the channels.
@@ -21,6 +23,10 @@ def imgmsg_to_cv2(img_msg):
     # If the byt order is different between the message and the system.
     if img_msg.is_bigendian == (sys.byteorder == 'little'):
         image_opencv = image_opencv.byteswap().newbyteorder()
+
+    if rgb8_flag:
+        image_opencv = cv2.cvtColor(image_opencv, cv2.COLOR_RGB2BGR)
+
     return image_opencv
 
 def cv2_to_imgmsg(cv_image, encoding):
@@ -29,7 +35,7 @@ def cv2_to_imgmsg(cv_image, encoding):
     img_msg.width = cv_image.shape[1]
     img_msg.encoding = encoding
     img_msg.is_bigendian = 0
-    img_msg.data = cv_image.tostring()
+    img_msg.data = cv_image.tobytes()
     img_msg.step = len(img_msg.data) // img_msg.height # That double line is actually integer division, not a comment
     return img_msg
 
@@ -60,7 +66,7 @@ def find_bounding_box_coords_from_contours(centroids, stats, maxPoint):
             continue
         
         bottomRight = Point(0, 0, None)
-        topLeft = Point(sys.maxint, sys.maxint, sys.maxint)
+        topLeft = Point(np.inf, np.inf, np.inf)
         
         border_margin = 50
 
@@ -114,7 +120,7 @@ def draw_claw_mask(input_image):
     image = input_image.copy()
     image = cv2.circle(image, (int(image.shape[1]/2)-claw_offset, int(image.shape[0]+25)), 120, 0, -1)
     image = cv2.circle(image, (int(image.shape[1]/2)+claw_offset, int(image.shape[0]+25)), 120, 0, -1)
-    image = cv2.rectangle(image, ((int(image.shape[1]/2)-visible_width/2, int(image.shape[0])-visible_height)), ((int(image.shape[1]/2)+visible_width/2, int(image.shape[0]))), 255, -1)
+    image = cv2.rectangle(image, ((int(image.shape[1]/2-visible_width/2), int(image.shape[0]-visible_height))), ((int(image.shape[1]/2+visible_width/2), int(image.shape[0]))), 255, -1)
     return image
 
 def generate_claw_mask(dim):
@@ -154,6 +160,7 @@ def process_image(msg):
     # Draw Mask to remove claw
     claw_mask = generate_claw_mask((resized.shape[0], resized.shape[1], 1))
     claw_masked_image = cv2.bitwise_and(close, claw_mask)
+    # showImage(claw_masked_image)
 
     # Find Contours
     numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(claw_masked_image, 8, cv2.CV_32S)
@@ -164,12 +171,10 @@ def process_image(msg):
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
 
-    # showImage(resized)
-
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
 
-    image_message = cv2_to_imgmsg(resized, encoding="passthrough")
+    image_message = cv2_to_imgmsg(resized, encoding="bgr8")
     
     image_pub = rospy.Publisher('armCamera/segmentedBlobs_AnnotatedImage', Image, queue_size=1)
     image_pub.publish(image_message)
