@@ -160,7 +160,6 @@ def process_image(msg):
     # Draw Mask to remove claw
     claw_mask = generate_claw_mask((resized.shape[0], resized.shape[1], 1))
     claw_masked_image = cv2.bitwise_and(close, claw_mask)
-    # showImage(claw_masked_image)
 
     # Find Contours
     numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(claw_masked_image, 8, cv2.CV_32S)
@@ -186,9 +185,9 @@ def process_image(msg):
     marker_pub.publish(boundingBoxMarker)
 
 def start_node():
-    rospy.init_node('segmented_colour')
+    rospy.init_node('upload_photo')
     rospy.loginfo('segmented_colour node started')
-    rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
+    rospy.Subscriber("/armCamera/color/image_rect_color/", Image, process_image)
     rospy.spin()
 
 if __name__ == '__main__':
