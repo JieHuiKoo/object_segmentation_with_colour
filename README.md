@@ -1,5 +1,7 @@
 # object_segmentation_with_colour
 
+About: This package takes in an RGB image, processes it, and outputs the information of the objects within the image
+
 To run, execute the following command
 ```
 rosrun object_segmentation_with_colour segmented_colour.py
