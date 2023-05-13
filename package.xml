@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>object-segmentation-with-colour</name>
+  <name>object_segmentation_with_colour</name>
   <version>0.0.0</version>
-  <description>The object-segmentation-with-colour package</description>
+  <description>The object_segmentation_with_colour package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

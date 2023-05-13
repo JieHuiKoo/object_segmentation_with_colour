@@ -103,7 +103,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES object-segmentation-with-colour
+#  LIBRARIES object_segmentation_with_colour
 #  CATKIN_DEPENDS cv_bridge rospy
 #  DEPENDS system_lib
 )
