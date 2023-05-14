@@ -1,4 +1,4 @@
-#! /home/jiehui/anaconda3/envs/tensorflow/bin/python
+#! /usr/bin/python3
 import rospy
 import sys
 import cv2
@@ -51,9 +51,10 @@ def obtain_connected_region_stats(i, stats, centroids):
 
     return connected_region_stats
 
-def showImage(img):
-    cv2.imshow('image', img)
-    cv2.waitKey(1)
+def showImage(img, name, debug):
+    if debug:
+        cv2.imshow(name, img)
+        cv2.waitKey(1)
 
 def find_bounding_box_coords_from_contours(centroids, stats, maxPoint):
 
@@ -101,7 +102,7 @@ def store_boundingBoxPoints_in_marker(boundingBoxPoints):
     
     boundingBoxPointsArray = []
 
-    for boundingBoxLocation in boundingBoxPoints[1:]:
+    for boundingBoxLocation in boundingBoxPoints[0:]:
         boundingBoxPointsArray.append(boundingBoxLocation[0])
         boundingBoxPointsArray.append(boundingBoxLocation[1])
     
@@ -113,14 +114,19 @@ def store_boundingBoxPoints_in_marker(boundingBoxPoints):
     return marker
 
 def draw_claw_mask(input_image):
-    claw_offset = 90
+    height_shift = 10
+    width_shift = 30
+    claw_offset = 140
     visible_width = 70
-    visible_height = 100
+    visible_height = 50
+    visible_bottom_height = 25
 
     image = input_image.copy()
-    image = cv2.circle(image, (int(image.shape[1]/2)-claw_offset, int(image.shape[0]+25)), 120, 0, -1)
-    image = cv2.circle(image, (int(image.shape[1]/2)+claw_offset, int(image.shape[0]+25)), 120, 0, -1)
-    image = cv2.rectangle(image, ((int(image.shape[1]/2-visible_width/2), int(image.shape[0]-visible_height))), ((int(image.shape[1]/2+visible_width/2), int(image.shape[0]))), 255, -1)
+    image = cv2.circle(image, (int(image.shape[1]/2)-claw_offset+width_shift, int(image.shape[0]+height_shift)), 100, 0, -1)
+    image = cv2.circle(image, (int(image.shape[1]/2)+claw_offset+width_shift, int(image.shape[0]+height_shift)), 100, 0, -1)
+    image = cv2.rectangle(image, ((int(image.shape[1]/2-visible_width/2)+width_shift, int(image.shape[0]-visible_height))), ((int(image.shape[1]/2+visible_width/2)+width_shift, int(image.shape[0]))), 255, -1)
+    image = cv2.rectangle(image, ((int(image.shape[1]/2-claw_offset/2)+width_shift, int(image.shape[0]-visible_bottom_height))), ((int(image.shape[1]/2+claw_offset/2)+width_shift, int(image.shape[0]))), 0, -1)
+
     return image
 
 def generate_claw_mask(dim):
@@ -130,6 +136,8 @@ def generate_claw_mask(dim):
     return claw_mask
 
 def process_image(msg):
+    debug = 0
+
     #Resize params
     resize_x = 1
     resize_y = 1
@@ -147,19 +155,27 @@ def process_image(msg):
     drawImg = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     # Apply Gaussian Filter
     gaussian = cv2.GaussianBlur(gray, (3,3), 0)
+    showImage(drawImg, 'Gaussian Filter', debug)
 
     # Threshold the image
     adaptive_img = cv2.adaptiveThreshold(gaussian, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 3)
     drawImg = cv2.cvtColor(adaptive_img, cv2.COLOR_GRAY2BGR)
+    showImage(drawImg, 'Thresholded Image', debug)
+
 
     # Morphology open
     opening = cv2.morphologyEx(adaptive_img, cv2.MORPH_OPEN, np.ones((3,3),np.uint8))
     close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, np.ones((11,11),np.uint8))
     drawImg = cv2.cvtColor(close, cv2.COLOR_GRAY2BGR)
+    showImage(drawImg, 'Morphology Open', debug)
+
 
     # Draw Mask to remove claw
     claw_mask = generate_claw_mask((resized.shape[0], resized.shape[1], 1))
+    showImage(claw_mask, 'Claw Mask Image', debug)
+
     claw_masked_image = cv2.bitwise_and(close, claw_mask)
+    showImage(claw_masked_image, 'Claw Masked Image', debug)
 
     # Find Contours
     numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(claw_masked_image, 8, cv2.CV_32S)
@@ -169,6 +185,7 @@ def process_image(msg):
     
     # Draw the bounding boxes
     resized = draw_bounding_boxes(resized, boundingBoxPoints)
+    showImage(resized, 'Bounding Boxes', debug)
 
     # Store the boundingBoxPoints in marker
     boundingBoxMarker = store_boundingBoxPoints_in_marker(boundingBoxPoints)
