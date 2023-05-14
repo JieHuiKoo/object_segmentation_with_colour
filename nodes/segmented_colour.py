@@ -202,9 +202,9 @@ def process_image(msg):
     marker_pub.publish(boundingBoxMarker)
 
 def start_node():
-    rospy.init_node('segmented_colour')
+    rospy.init_node('upload_photo')
     rospy.loginfo('segmented_colour node started')
-    rospy.Subscriber("/armCamera/color/image_raw", Image, process_image)
+    rospy.Subscriber("/armCamera/color/image_rect_color/", Image, process_image)
     rospy.spin()
 
 if __name__ == '__main__':
